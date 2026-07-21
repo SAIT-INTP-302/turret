@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "turret"
+version = "0.1.0"
+description = "Roll/Pitch/Yaw turret with OpenCV target tracking on Raspberry Pi"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "opencv-python",
+    "PyYAML",
+]
+
+[project.optional-dependencies]
+# On the Pi, picamera2 comes from apt (python3-picamera2); see README.
+pi = ["pigpio"]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+turret = "turret.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
