@@ -1,0 +1,65 @@
+# Turret configuration. Any field omitted here falls back to the defaults in
+# src/turret/config.py. Pin numbers are BCM.
+
+axes:
+  yaw:
+    backend: servo
+    servo:
+      pin: 17
+      min_us: 500        # SG92R calibration — verify with scripts/axis_test.py
+      max_us: 2400
+      min_angle: 20.0
+      max_angle: 160.0
+      start_angle: 90.0
+      max_deg_per_s: 120.0
+  pitch:
+    backend: servo
+    servo:
+      pin: 27
+      min_us: 500
+      max_us: 2400
+      min_angle: 45.0
+      max_angle: 135.0
+      start_angle: 90.0
+      max_deg_per_s: 120.0
+  roll:
+    backend: stepper
+    stepper:
+      pins: [5, 6, 13, 19]   # ULN2003 IN1..IN4
+      steps_per_rev: 4096
+      max_steps_per_s: 500.0
+      spin_steps_per_s: 400.0
+
+camera:
+  backend: auto        # auto | picamera2 | opencv
+  device: 0
+  width: 640
+  height: 480
+  fps: 30
+
+detection:
+  red_low_1: [0, 120, 70]
+  red_high_1: [10, 255, 255]
+  red_low_2: [170, 120, 70]
+  red_high_2: [180, 255, 255]
+  blur_ksize: 5
+  morph_ksize: 5
+  min_area_px: 400
+  max_aspect: 4.0
+
+control:
+  kp_yaw: 0.05         # deg of correction per px of error
+  kp_pitch: 0.05
+  deadband_px: 15
+  max_step_deg: 4.0
+  lost_target_timeout_s: 2.0
+
+fire:
+  mode: log            # log | roll_spin
+  center_tol_px: 25
+  min_area_px: 3000
+  dwell_s: 0.5
+  cooldown_s: 2.0
+  spin_duration_s: 1.0
+
+allow_mock_fallback: true
