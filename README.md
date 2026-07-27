@@ -7,7 +7,7 @@ and in range.
 ## How it works
 
 ```
-camera ──► RedBlobDetector ──► Tracker ──► yaw/pitch axes (slew-limited)
+camera ──► Detector (hsv | tflite | opencv_dnn) ──► Tracker ──► yaw/pitch axes (slew-limited)
                  │
                  └─────────► FireDecider ──► FireControl (log | spin roll axis)
 ```
@@ -21,11 +21,16 @@ camera ──► RedBlobDetector ──► Tracker ──► yaw/pitch axes (sle
 - **Roll**: 28BYJ-48 stepper on a ULN2003 driver (half-stepping, 4096
   steps/rev). Firing is done by rotating the barrel, which needs continuous
   rotation a 90°-travel servo can't provide — hence the stepper.
-- **Detection**: HSV red threshold over both hue-wrap ranges (0–10 and
-  170–180), morphological open/close, contour filtering by area and aspect,
-  largest blob wins.
-- **Fire decision**: target centered within tolerance AND blob area above the
-  in-range threshold, held for a dwell time, with a cooldown between shots.
+- **Detection**: pluggable, selected by `detector_backend` in
+  [`config/default.yaml`](config/default.yaml) or `--detector` on the CLI.
+  Default is HSV red threshold over both hue-wrap ranges (0–10 and 170–180),
+  morphological open/close, contour filtering by area and aspect, largest
+  blob wins. Two ML person-detector backends are also available — see
+  [ML person detection](#ml-person-detection) below.
+- **Fire decision**: target centered within tolerance AND target area above
+  the in-range threshold, held for a dwell time, with a cooldown between
+  shots. `area` means different things for different detectors (see below),
+  so `fire.min_area_px` needs retuning per detector.
 
 Everything is configured in [`config/default.yaml`](config/default.yaml)
 (pins, calibration, HSV ranges, gains, fire behavior, axis→backend mapping).
@@ -71,9 +76,96 @@ not from the Pi's 5 V rail.
    travel limits, then record them in the config.
 2. `python scripts/hsv_tune.py` — tune the red HSV ranges under your
    lighting; press `p` to print YAML-ready values.
+   - *(ML only)* `python scripts/download_models.py --set all &&
+     python scripts/download_models.py --verify` — fetch model weights and
+     confirm the label mapping prints `person`.
+   - *(ML only)* `python scripts/ml_tune.py --detector tflite --benchmark 100`
+     on the Pi, then live mode to set `conf_threshold` **and note the
+     reported `area`** for `fire.min_area_px` (see below).
 3. `python -m turret --headless --log-level DEBUG` — full loop with
-   `fire.mode: log` (no firing hardware engaged).
+   `fire.mode: log` (no firing hardware engaged). Add `--detector tflite` (or
+   `opencv_dnn`) to use an ML backend instead of the HSV default.
 4. Switch `fire.mode: roll_spin` when the barrel mechanism is mounted.
+
+## ML person detection
+
+Two ML backends are available alongside the default HSV detector, selected
+via `detector_backend` in `config/default.yaml` or `--detector` on the CLI.
+Both implement the same `Detector.detect(frame) -> (Detection | None, debug_img)`
+interface as the HSV detector, so `Tracker` and `FireDecider` don't change.
+
+| Backend      | Model                                   | Size   | Extra install                | Notes |
+|--------------|------------------------------------------|--------|-------------------------------|-------|
+| `tflite`     | SSD-MobileNet-V2 (COCO, int8 quantized)  | 6.2 MB | `pip install -e '.[ml]'`      | Recommended; ~5–10 FPS expected on Pi 4 (unverified on real hardware, see below) |
+| `opencv_dnn` | NanoDet-Plus (int8, block-quantized)     | 1.1 MB | none (`cv2.dnn` is built in)  | Fallback; smaller and less accurate, FPS on Pi not yet measured |
+
+**Recommended: `tflite`.** It needs the `ai-edge-litert` runtime, which only
+publishes wheels for **64-bit (aarch64)** Linux:
+
+```sh
+uname -m   # must print aarch64 -- if it prints armv7l, use opencv_dnn instead
+```
+
+**Fallback: `opencv_dnn`.** No extra dependency (uses `cv2.dnn`, already
+part of `opencv-python`), so it works on 32-bit OSes and needs nothing
+installed beyond what's already required. It's a smaller, less accurate
+model, included as a backend that works everywhere rather than for
+raw performance. Note: `cv2.dnn`'s Caffe importer was removed in OpenCV 5,
+which is why this isn't the classic Caffe MobileNet-SSD — see
+`src/turret/vision/dnn_detector.py` for the full story.
+
+### Setup
+
+```sh
+pip install -e '.[ml]'                       # only needed for detector_backend: tflite
+python scripts/download_models.py --set all  # fetches both backends' weights into models/
+python scripts/download_models.py --verify   # sanity-checks what's on disk, no camera needed
+```
+
+`models/` is gitignored — weights are fetched, not committed. Model URLs
+and SHA-256 checksums are pinned in `scripts/download_models.py`; re-running
+the download is idempotent (skips files whose checksum already matches).
+
+### Selecting a backend
+
+```sh
+python -m turret --detector tflite                              # config/default.yaml default model path
+python -m turret --detector opencv_dnn --model models/object_detection_nanodet_2022nov_int8bq.onnx
+```
+
+The `opencv_dnn` backend needs `--model` (or `ml_detection.model_path` in
+config) pointed at its `.onnx` file explicitly — the config default points
+at the `tflite` model, since `tflite` is the recommended backend.
+
+### Tuning
+
+`scripts/ml_tune.py` is the ML equivalent of `hsv_tune.py`: live mode shows
+every candidate detection with a confidence trackbar, `--benchmark N` runs
+headless and reports FPS/latency so you can validate real-world performance
+on the actual Pi before enabling `fire.mode: roll_spin`.
+
+```sh
+python scripts/ml_tune.py --detector tflite --benchmark 100   # timing only, no display
+python scripts/ml_tune.py --detector tflite clip.mp4          # live tuning; 'p' prints YAML
+```
+
+**Important:** `fire.min_area_px` is calibrated for HSV *contour* area by
+default. ML backends report full-person *bounding-box* area, which is
+typically 5–20x larger at the same distance — reusing the HSV-tuned value
+means the turret will consider itself "in range" from much farther away
+than intended. Use the `area` reported by `ml_tune.py` at your intended
+engagement distance to set `fire.min_area_px` before enabling
+`fire.mode: roll_spin` with an ML backend.
+
+### Adding another backend
+
+Implement `Detector.detect()` in a new `src/turret/vision/*.py` file, add a
+branch to `build_detector()` in `src/turret/vision/factory.py`, and (if it
+needs a new dependency) add an extras group in `pyproject.toml`. An `onnx`
+backend (e.g. YOLOv8n via `onnxruntime`) was considered and deliberately
+left out: YOLO-family models benchmark around 1 FPS on a Pi 4 CPU in public
+benchmarks, which wasn't worth building for the 2 GB CPU-only hardware this
+project targets.
 
 ## Safety
 
