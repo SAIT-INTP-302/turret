@@ -18,3 +18,6 @@ dist/
 # Test media
 *.mp4
 *.avi
+
+# ML model weights (fetch with scripts/download_models.py)
+models/

@@ -10,10 +10,11 @@ import cv2
 import numpy as np
 
 from turret.config import DetectionConfig
+from turret.vision.base import Detector
 from turret.vision.types import Detection
 
 
-class RedBlobDetector:
+class RedBlobDetector(Detector):
     def __init__(self, cfg: DetectionConfig) -> None:
         self._cfg = cfg
         self._kernel = cv2.getStructuringElement(

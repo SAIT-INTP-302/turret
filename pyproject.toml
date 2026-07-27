@@ -17,6 +17,10 @@ dependencies = [
 # On the Pi, picamera2 comes from apt (python3-picamera2); see README.
 pi = ["pigpio"]
 dev = ["pytest", "ruff"]
+# For detector_backend: tflite. ai-edge-litert publishes aarch64 Linux
+# wheels only (no armv7l) -- see README. detector_backend: opencv_dnn needs
+# no extra dependency at all (cv2.dnn is already in opencv-python).
+ml = ["ai-edge-litert"]
 
 [project.scripts]
 turret = "turret.__main__:main"
