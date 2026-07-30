@@ -33,7 +33,7 @@ Everything is configured in [`config/default.yaml`](config/default.yaml)
 ## Dev setup (any machine with Nix)
 
 ```sh
-devenv shell            # or `direnv allow` once; installs the venv + deps
+devenv shell            # or `devenv allow` once; installs the venv + deps
 pytest                  # unit tests, no hardware needed
 python -m turret --mock --video clip.mp4   # full pipeline with mock actuators
 ```
