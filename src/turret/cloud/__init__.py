@@ -1,0 +1,1 @@
+"""Cloud integration helpers for the turret project."""

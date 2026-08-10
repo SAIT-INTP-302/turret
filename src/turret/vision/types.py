@@ -9,3 +9,4 @@ class Detection:
     cy: int
     bbox: tuple[int, int, int, int]  # x, y, w, h
     area: float  # contour area in px^2
+    confidence: float | None = None  # ML score; None for HSV detection

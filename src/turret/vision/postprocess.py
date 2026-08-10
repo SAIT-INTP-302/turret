@@ -174,6 +174,7 @@ def select_largest(cands: Sequence[Candidate]) -> Detection | None:
         cy=best.y + best.h // 2,
         bbox=(best.x, best.y, best.w, best.h),
         area=float(best.w * best.h),
+        confidence=best.score,
     )
 
 
