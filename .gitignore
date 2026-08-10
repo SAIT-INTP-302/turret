@@ -24,3 +24,6 @@ models/
 
 # Local mock cloud event data generated during testing
 mock_events.jsonl
+
+# Local Azure Functions settings containing secrets
+azure_function/local.settings.json
