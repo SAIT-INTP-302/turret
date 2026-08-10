@@ -21,3 +21,6 @@ dist/
 
 # ML model weights (fetch with scripts/download_models.py)
 models/
+
+# Local mock cloud event data generated during testing
+mock_events.jsonl
