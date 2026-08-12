@@ -11,6 +11,7 @@ dependencies = [
     "numpy",
     "opencv-python",
     "PyYAML",
+    "Flask",
 ]
 
 [project.optional-dependencies]

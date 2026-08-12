@@ -20,6 +20,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--headless", action="store_true", help="No display windows")
     parser.add_argument("--show-mask", action="store_true", help="Show the detection mask")
     parser.add_argument("--log-level", default="INFO")
+    parser.add_argument("--dashboard", action="store_true", help="Serve the event dashboard")
+    parser.add_argument("--dashboard-port", type=int, default=8080)
+    parser.add_argument("--db", default="turret_events.db", help="SQLite path for event log")
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -38,6 +41,9 @@ def main(argv: list[str] | None = None) -> None:
         force_mock=args.mock,
         headless=args.headless,
         show_mask=args.show_mask,
+        dashboard=args.dashboard,
+        dashboard_port=args.dashboard_port,
+        db_path=args.db,
     ).run()
 
 

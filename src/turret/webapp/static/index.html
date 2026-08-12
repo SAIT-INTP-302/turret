@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Turret Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2f3a;
+    --text: #e8eaed;
+    --muted: #8b93a1;
+    --accent: #ff4d4d;
+    --accent2: #4da3ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  .status { font-size: 13px; color: var(--muted); }
+  .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #3ddc84; margin-right: 6px;
+  }
+  .stats {
+    display: flex; gap: 12px; padding: 16px 24px; flex-wrap: wrap;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    min-width: 120px;
+  }
+  .stat .n { font-size: 26px; font-weight: 700; }
+  .stat .l { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  main { padding: 0 24px 40px; max-width: 900px; margin: 0 auto; }
+  .feed { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .event {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .event.fired { border-left-color: var(--accent); }
+  .event .left { display: flex; align-items: center; gap: 10px; }
+  .badge {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 999px; letter-spacing: .03em;
+  }
+  .badge.sighting { background: rgba(77,163,255,.15); color: var(--accent2); }
+  .badge.fired { background: rgba(255,77,77,.15); color: var(--accent); }
+  .meta { font-size: 12px; color: var(--muted); }
+  .time { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .empty { color: var(--muted); text-align: center; padding: 60px 20px; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎯 Turret Dashboard</h1>
+  <div class="status"><span class="dot"></span>Live, updates every 2s</div>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="n" id="statSightings">0</div><div class="l">Sightings</div></div>
+  <div class="stat"><div class="n" id="statFired">0</div><div class="l">Fired</div></div>
+</div>
+
+<main>
+  <div class="feed" id="feed">
+    <div class="empty">Waiting for events…</div>
+  </div>
+</main>
+
+<script>
+function fmtTime(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleString(undefined, {
+    month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit"
+  });
+}
+
+function renderEvent(ev) {
+  const div = document.createElement("div");
+  div.className = "event " + (ev.kind === "fired" ? "fired" : "");
+  const posText = (ev.cx != null && ev.cy != null)
+    ? `at (${ev.cx}, ${ev.cy})` + (ev.area != null ? `, area ${Math.round(ev.area)}px²` : "")
+    : (ev.note || "");
+  div.innerHTML = `
+    <div class="left">
+      <span class="badge ${ev.kind}">${ev.kind === "fired" ? "Fired" : "Sighting"}</span>
+      <span class="meta">${posText}</span>
+    </div>
+    <span class="time">${fmtTime(ev.ts)}</span>
+  `;
+  return div;
+}
+
+async function refresh() {
+  try {
+    const res = await fetch("/api/events?limit=100");
+    const data = await res.json();
+    document.getElementById("statSightings").textContent = data.counts.sighting || 0;
+    document.getElementById("statFired").textContent = data.counts.fired || 0;
+
+    const feed = document.getElementById("feed");
+    feed.innerHTML = "";
+    if (data.events.length === 0) {
+      feed.innerHTML = '<div class="empty">Waiting for events…</div>';
+      return;
+    }
+    for (const ev of data.events) {
+      feed.appendChild(renderEvent(ev));
+    }
+  } catch (e) {
+    console.error("Failed to refresh", e);
+  }
+}
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+
+</body>
+</html>

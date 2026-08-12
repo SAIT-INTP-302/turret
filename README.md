@@ -36,6 +36,7 @@ Everything is configured in [`config/default.yaml`](config/default.yaml)
 devenv shell            # or `devenv allow` once; installs the venv + deps
 pytest                  # unit tests, no hardware needed
 python -m turret --mock --video clip.mp4   # full pipeline with mock actuators
+python -m turret --mock --dashboard        # same, plus the web dashboard on :8080
 ```
 
 `--mock` forces simulated axes; without it, missing pigpio just logs a
@@ -74,6 +75,49 @@ not from the Pi's 5 V rail.
 3. `python -m turret --headless --log-level DEBUG` — full loop with
    `fire.mode: log` (no firing hardware engaged).
 4. Switch `fire.mode: roll_spin` when the barrel mechanism is mounted.
+
+## Web dashboard
+
+A local Flask app logs every sighting (target locked on) and every fire to
+SQLite, and serves a live-updating page showing the event feed and running
+counts. No cloud involved, everything runs on the Pi.
+
+```
+turret loop ──► EventStore (SQLite) ◄── Flask API ──► dashboard (browser)
+   (sighting / fired events)          /api/events        auto-refreshes 2s
+```
+
+Run it alongside the main loop:
+
+```sh
+python -m turret --dashboard --mock            # add --headless if no display
+```
+
+Then open `http://<pi-ip>:8080` in a browser on the same network. Flags:
+
+| Flag               | Default            | What it does                          |
+|--------------------|--------------------|----------------------------------------|
+| `--dashboard`       | off                | Enables the dashboard server           |
+| `--dashboard-port`  | `8080`             | Port the dashboard listens on          |
+| `--db`              | `turret_events.db` | SQLite file where events are stored    |
+
+Each event records the kind (`sighting` or `fired`), timestamp, and the
+target's pixel position/blob area at that moment. `sighting` is logged once
+when a lock-on starts (not every frame); `fired` is logged whenever
+`FireControl.fire()` actually runs.
+
+The server can also run standalone (e.g. for testing without a camera):
+
+```sh
+python -m turret.webapp.server --db turret_events.db
+curl -X POST http://localhost:8080/api/events \
+  -H "Content-Type: application/json" \
+  -d '{"kind": "sighting", "cx": 320, "cy": 240, "area": 1500}'
+```
+
+Code lives in [`src/turret/webapp/`](src/turret/webapp/): `store.py` (SQLite
+event log), `server.py` (Flask API + static page server), `static/index.html`
+(the dashboard UI).
 
 ## Safety
 

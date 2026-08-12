@@ -14,6 +14,7 @@ from turret.config import TurretConfig
 from turret.control.fire import FireDecider, make_fire_control
 from turret.control.tracker import Tracker
 from turret.vision.detector import RedBlobDetector
+from turret.webapp.store import EventStore
 
 log = logging.getLogger(__name__)
 
@@ -26,16 +27,26 @@ class TurretApp:
         force_mock: bool = False,
         headless: bool = False,
         show_mask: bool = False,
+        dashboard: bool = False,
+        dashboard_port: int = 8080,
+        db_path: str = "turret_events.db",
     ) -> None:
         self._cfg = cfg
         self._force_mock = force_mock
         self._headless = headless
         self._show_mask = show_mask
+        self._dashboard = dashboard
+        self._dashboard_port = dashboard_port
+        self._store = EventStore(db_path) if dashboard else None
 
     def run(self) -> None:
         cfg = self._cfg
         axes = build_axes(cfg, force_mock=self._force_mock)
         camera = open_camera(cfg.camera)
+        if self._dashboard and self._store is not None:
+            from turret.webapp.server import run_in_thread
+
+            run_in_thread(self._store, port=self._dashboard_port)
         try:
             frame_size = camera.resolution
             detector = RedBlobDetector(cfg.detection)
@@ -47,6 +58,7 @@ class TurretApp:
             prev = time.monotonic()
             fps = 0.0
             fired_flash = 0.0
+            was_locked = False
             log.info("Turret running (%dx%d)  Ctrl-C or 'q' to quit", *frame_size)
             while True:
                 frame = camera.read()
@@ -63,9 +75,17 @@ class TurretApp:
                 tracker.update(det, dt)
                 for axis in axes.values():
                     axis.update(dt)
+
+                is_locked = decider.locked(det)
+                if self._store is not None and is_locked and not was_locked and det is not None:
+                    self._store.log("sighting", cx=det.cx, cy=det.cy, area=det.area)
+                was_locked = is_locked
+
                 if decider.update(det, dt):
                     fire_control.fire()
                     fired_flash = 0.5
+                    if self._store is not None and det is not None:
+                        self._store.log("fired", cx=det.cx, cy=det.cy, area=det.area)
                 fire_control.update(dt)
                 fired_flash = max(0.0, fired_flash - dt)
 
