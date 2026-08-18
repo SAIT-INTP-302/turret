@@ -72,6 +72,11 @@ def make_fire_control(cfg: FireConfig, roll: Axis | None) -> FireControl:
     if cfg.mode == "roll_spin":
         if roll is None:
             raise ValueError("fire mode 'roll_spin' requires a roll axis")
+        if not roll.supports_spin:
+            raise ValueError(
+                f"fire mode 'roll_spin' requires a continuous-rotation axis, but "
+                f"roll axis ({type(roll).__name__}) doesn't support spin()"
+            )
         return RollSpinFireControl(roll, cfg)
     if cfg.mode == "servo_pull":
         if roll is None:

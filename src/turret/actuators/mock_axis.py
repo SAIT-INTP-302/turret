@@ -10,6 +10,8 @@ log = logging.getLogger(__name__)
 
 
 class MockAxis(Axis):
+    supports_spin = True
+
     def __init__(
         self,
         name: str,

@@ -86,10 +86,17 @@ Pi's 5 V rail.
    - *(ML only)* `python scripts/ml_tune.py --detector tflite --benchmark 100`
      on the Pi, then live mode to set `conf_threshold` **and note the
      reported `area`** for `fire.min_area_px` (see below).
-3. `python -m turret --headless --log-level DEBUG` — full loop with
+3. `python -m turret --selftest` — checks every subsystem (axes, camera,
+   detector, fire control) against the real config and reports
+   `[PASS]/[WARN]/[FAIL]` per check, non-zero exit on any failure. Run
+   `python -m turret --mock --selftest` first for a dry run with no hardware
+   at all. It never actuates the trigger axis (only constructs it) unless
+   you pass `--actuate-trigger`; yaw/pitch get a small nudge-and-return
+   motion test by default (skip with `--no-motion`).
+4. `python -m turret --headless --log-level DEBUG` — full loop with
    `fire.mode: log` (no firing hardware engaged). Add `--detector tflite` (or
    `opencv_dnn`) to use an ML backend instead of the HSV default.
-4. Switch `fire.mode: servo_pull` when the trigger mechanism is mounted
+5. Switch `fire.mode: servo_pull` when the trigger mechanism is mounted
    (or `fire.mode: roll_spin` if using a stepper-driven spinning barrel
    instead).
 
