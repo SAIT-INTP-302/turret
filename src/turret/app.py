@@ -13,7 +13,7 @@ from turret.camera.factory import open_camera
 from turret.config import TurretConfig
 from turret.control.fire import FireDecider, make_fire_control
 from turret.control.tracker import Tracker
-from turret.vision.detector import RedBlobDetector
+from turret.vision.factory import build_detector
 from turret.webapp.store import EventStore
 
 log = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ class TurretApp:
             run_in_thread(self._store, port=self._dashboard_port)
         try:
             frame_size = camera.resolution
-            detector = RedBlobDetector(cfg.detection)
+            detector = build_detector(cfg, debug=self._show_mask)
             tracker = Tracker(cfg.control, frame_size, axes["yaw"], axes["pitch"])
             decider = FireDecider(cfg.fire, frame_size)
             fire_control = make_fire_control(cfg.fire, axes.get("roll"))

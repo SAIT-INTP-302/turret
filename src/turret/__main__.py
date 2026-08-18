@@ -16,6 +16,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="YAML config path")
     parser.add_argument("--video", help="Use a video file instead of a camera")
     parser.add_argument("--camera", type=int, help="Camera index (forces OpenCV backend)")
+    parser.add_argument(
+        "--detector",
+        choices=["hsv", "tflite", "opencv_dnn"],
+        help="Override detector_backend from config",
+    )
+    parser.add_argument("--model", help="Override ml_detection.model_path")
     parser.add_argument("--mock", action="store_true", help="Force mock actuators")
     parser.add_argument("--headless", action="store_true", help="No display windows")
     parser.add_argument("--show-mask", action="store_true", help="Show the detection mask")
@@ -35,6 +41,10 @@ def main(argv: list[str] | None = None) -> None:
         cfg = replace(cfg, camera=replace(cfg.camera, backend="opencv", device=args.video))
     elif args.camera is not None:
         cfg = replace(cfg, camera=replace(cfg.camera, backend="opencv", device=args.camera))
+    if args.detector is not None:
+        cfg = replace(cfg, detector_backend=args.detector)
+    if args.model is not None:
+        cfg = replace(cfg, ml_detection=replace(cfg.ml_detection, model_path=args.model))
 
     TurretApp(
         cfg,

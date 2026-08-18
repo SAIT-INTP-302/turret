@@ -47,6 +47,38 @@ detection:
   min_area_px: 400
   max_aspect: 4.0
 
+# Which detector feeds the tracker.
+#   hsv        - HSV red-blob threshold (default; no model file needed)
+#   tflite     - SSD-MobileNet-V2 COCO via ai-edge-litert (LiteRT); recommended
+#                ML backend on a Pi 4 -- needs: pip install -e '.[ml]'  +  a
+#                64-bit (aarch64) OS
+#   opencv_dnn - NanoDet-Plus (int8) via cv2.dnn — no extra pip install;
+#                fallback for when LiteRT isn't available (e.g. 32-bit OS).
+#                Smaller and less accurate than the tflite model.
+# Both ML backends need model files: python scripts/download_models.py --set all
+# opencv_dnn also needs model_path overridden below (it defaults to the
+# tflite model path) -- see the model_path comment.
+detector_backend: hsv
+
+ml_detection:
+  # Default is the tflite model. For detector_backend: opencv_dnn, override
+  # this to models/object_detection_nanodet_2022nov_int8bq.onnx (e.g. via
+  # --model on the CLI).
+  model_path: models/ssd_mobilenet_v2_coco_quant_postprocess.tflite
+  labels_path: models/coco_labels.txt   # tflite backend only
+  target_classes: [person]
+  conf_threshold: 0.5
+  num_threads: 2                        # tflite backend only
+  input_size: 416                       # opencv_dnn backend only (NanoDet architecture constant)
+  nms_iou_threshold: 0.6                # opencv_dnn backend only (NanoDet has no baked-in NMS)
+
+# NOTE: fire.min_area_px below is calibrated for HSV *contour* area. The ML
+# backends report full-person *bounding-box* area (w*h), which is typically
+# 5-20x larger at the same distance. Retune min_area_px (with
+# scripts/ml_tune.py) before switching detector_backend away from "hsv" and
+# enabling fire.mode: roll_spin — otherwise the turret will consider itself
+# "in range" from much farther away than intended.
+
 control:
   kp_yaw: 0.05         # deg of correction per px of error
   kp_pitch: 0.05

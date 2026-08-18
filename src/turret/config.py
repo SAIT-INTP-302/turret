@@ -15,6 +15,9 @@ import yaml
 
 log = logging.getLogger(__name__)
 
+# src/turret/config.py -> repo root
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 @dataclass(frozen=True)
 class ServoAxisConfig:
@@ -86,6 +89,24 @@ class FireConfig:
     spin_duration_s: float = 1.0
 
 
+@dataclass(frozen=True)
+class MLDetectionConfig:
+    # Paths are resolved against PROJECT_ROOT when relative. Fetch with
+    # scripts/download_models.py.
+    model_path: str = "models/ssd_mobilenet_v2_coco_quant_postprocess.tflite"
+    labels_path: str = "models/coco_labels.txt"  # tflite backend only
+    target_classes: tuple[str, ...] = ("person",)
+    conf_threshold: float = 0.5
+    num_threads: int = 2  # tflite backend only; 4-core Pi, leave headroom for the control loop
+    # opencv_dnn backend only (NanoDet architecture constant -- don't change
+    # unless swapping in a different model; tflite reads its size from the
+    # model instead of this field).
+    input_size: int = 416
+    # opencv_dnn backend only: NanoDet has no NMS baked into the graph, so
+    # it runs cv2.dnn.NMSBoxes itself using this IoU threshold.
+    nms_iou_threshold: float = 0.6
+
+
 def _default_axes() -> dict[str, AxisConfig]:
     return {
         "yaw": AxisConfig(backend="servo", servo=ServoAxisConfig(pin=17)),
@@ -101,6 +122,8 @@ class TurretConfig:
     axes: dict[str, AxisConfig] = field(default_factory=_default_axes)
     camera: CameraConfig = field(default_factory=CameraConfig)
     detection: DetectionConfig = field(default_factory=DetectionConfig)
+    detector_backend: str = "hsv"  # "hsv" | "tflite" | "opencv_dnn"
+    ml_detection: MLDetectionConfig = field(default_factory=MLDetectionConfig)
     control: ControlConfig = field(default_factory=ControlConfig)
     fire: FireConfig = field(default_factory=FireConfig)
     allow_mock_fallback: bool = True
