@@ -10,7 +10,7 @@ def test_defaults_without_file():
     assert isinstance(cfg, TurretConfig)
     assert set(cfg.axes) == {"yaw", "pitch", "roll"}
     assert cfg.axes["yaw"].backend == "servo"
-    assert cfg.axes["roll"].backend == "stepper"
+    assert cfg.axes["roll"].backend == "servo"
 
 
 def test_ml_detection_defaults():
@@ -28,7 +28,7 @@ def test_missing_file_falls_back(tmp_path):
 def test_default_yaml_loads():
     cfg = load_config(DEFAULT_YAML)
     assert cfg.axes["yaw"].servo.pin == 17
-    assert cfg.axes["roll"].stepper.pins == (5, 6, 13, 19)
+    assert cfg.axes["roll"].servo.pin == 5
     assert cfg.detection.red_low_2 == (170, 120, 70)
     assert cfg.fire.mode == "log"
     assert cfg.detector_backend == "hsv"

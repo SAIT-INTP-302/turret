@@ -81,12 +81,14 @@ class ControlConfig:
 
 @dataclass(frozen=True)
 class FireConfig:
-    mode: str = "log"  # "log" | "roll_spin"
+    mode: str = "log"  # "log" | "roll_spin" | "servo_pull"
     center_tol_px: int = 25
     min_area_px: int = 3000  # blob area proxy for "in range"
     dwell_s: float = 0.5
     cooldown_s: float = 2.0
-    spin_duration_s: float = 1.0
+    spin_duration_s: float = 1.0  # roll_spin only
+    trigger_pull_angle: float = 90.0  # servo_pull only: angle when pulled
+    trigger_hold_s: float = 0.15  # servo_pull only: how long to hold before releasing
 
 
 @dataclass(frozen=True)
@@ -112,7 +114,14 @@ def _default_axes() -> dict[str, AxisConfig]:
         "yaw": AxisConfig(backend="servo", servo=ServoAxisConfig(pin=17)),
         "pitch": AxisConfig(backend="servo", servo=ServoAxisConfig(pin=27)),
         "roll": AxisConfig(
-            backend="stepper", stepper=StepperAxisConfig(pins=(5, 6, 13, 19))
+            backend="servo",
+            servo=ServoAxisConfig(
+                pin=5,
+                min_angle=0.0,
+                max_angle=90.0,
+                start_angle=0.0,
+                max_deg_per_s=400.0,
+            ),
         ),
     }
 

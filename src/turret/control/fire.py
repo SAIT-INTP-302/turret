@@ -1,8 +1,9 @@
 """Fire decision and fire actuation.
 
 FireDecider says *when* to fire (target centered, big enough, held long
-enough, cooldown elapsed). FireControl says *how*: log-only stub, or spinning
-the roll axis — the barrel fires by rotating.
+enough, cooldown elapsed). FireControl says *how*: log-only stub, spinning
+the roll axis (a stepper-driven barrel that fires by rotating), or pulling a
+trigger servo to a fire angle and releasing it back to rest.
 """
 
 from __future__ import annotations
@@ -48,11 +49,34 @@ class RollSpinFireControl(FireControl):
                 self._roll.stop_spin()
 
 
+class ServoPullFireControl(FireControl):
+    def __init__(self, roll: Axis, cfg: FireConfig) -> None:
+        self._roll = roll
+        self._cfg = cfg
+        self._rest_angle = roll.target
+        self._hold_left_s = 0.0
+
+    def fire(self) -> None:
+        log.warning("FIRE! (pulling trigger servo to %.1f deg)", self._cfg.trigger_pull_angle)
+        self._roll.set_target(self._cfg.trigger_pull_angle)
+        self._hold_left_s = self._cfg.trigger_hold_s
+
+    def update(self, dt: float) -> None:
+        if self._hold_left_s > 0.0:
+            self._hold_left_s -= dt
+            if self._hold_left_s <= 0.0:
+                self._roll.set_target(self._rest_angle)
+
+
 def make_fire_control(cfg: FireConfig, roll: Axis | None) -> FireControl:
     if cfg.mode == "roll_spin":
         if roll is None:
             raise ValueError("fire mode 'roll_spin' requires a roll axis")
         return RollSpinFireControl(roll, cfg)
+    if cfg.mode == "servo_pull":
+        if roll is None:
+            raise ValueError("fire mode 'servo_pull' requires a roll axis")
+        return ServoPullFireControl(roll, cfg)
     if cfg.mode == "log":
         return LogFireControl()
     raise ValueError(f"Unknown fire mode {cfg.mode!r}")
