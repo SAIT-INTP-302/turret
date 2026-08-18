@@ -36,6 +36,24 @@
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;
     background: #3ddc84; margin-right: 6px;
   }
+  .preview {
+    margin: 16px 24px 0;
+    max-width: 900px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+  }
+  .preview img {
+    display: block;
+    width: 100%;
+    max-height: 480px;
+    object-fit: contain;
+  }
   .stats {
     display: flex; gap: 12px; padding: 16px 24px; flex-wrap: wrap;
   }
@@ -80,6 +98,12 @@
   <h1>🎯 Turret Dashboard</h1>
   <div class="status"><span class="dot"></span>Live, updates every 2s</div>
 </header>
+
+<div class="preview">
+  <img id="cam" src="/api/stream.mjpg" alt="camera feed"
+       onerror="this.onerror=null; this.remove(); document.getElementById('camEmpty').style.display='block';">
+  <div class="empty" id="camEmpty" style="display:none;">No camera feed</div>
+</div>
 
 <div class="stats">
   <div class="stat"><div class="n" id="statSightings">0</div><div class="l">Sightings</div></div>

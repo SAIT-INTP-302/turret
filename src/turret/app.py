@@ -14,6 +14,7 @@ from turret.config import TurretConfig
 from turret.control.fire import FireDecider, make_fire_control
 from turret.control.tracker import Tracker
 from turret.vision.factory import build_detector
+from turret.webapp.frames import FrameStore
 from turret.webapp.store import EventStore
 
 log = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ class TurretApp:
         self._dashboard = dashboard
         self._dashboard_port = dashboard_port
         self._store = EventStore(db_path) if dashboard else None
+        self._frames = FrameStore() if dashboard else None
 
     def run(self) -> None:
         cfg = self._cfg
@@ -46,7 +48,7 @@ class TurretApp:
         if self._dashboard and self._store is not None:
             from turret.webapp.server import run_in_thread
 
-            run_in_thread(self._store, port=self._dashboard_port)
+            run_in_thread(self._store, self._frames, port=self._dashboard_port)
         try:
             frame_size = camera.resolution
             detector = build_detector(cfg, debug=self._show_mask)
@@ -89,8 +91,11 @@ class TurretApp:
                 fire_control.update(dt)
                 fired_flash = max(0.0, fired_flash - dt)
 
-                if not self._headless:
+                if not self._headless or self._frames is not None:
                     viz.draw(frame, det, cfg, fired=fired_flash > 0, fps=fps)
+                if self._frames is not None:
+                    self._frames.set_frame(frame)
+                if not self._headless:
                     cv2.imshow("turret", frame)
                     if self._show_mask:
                         cv2.imshow("mask", mask)

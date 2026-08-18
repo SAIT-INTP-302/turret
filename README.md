@@ -103,18 +103,26 @@ Pi's 5 V rail.
 ## Web dashboard
 
 A local Flask app logs every sighting (target locked on) and every fire to
-SQLite, and serves a live-updating page showing the event feed and running
-counts. No cloud involved, everything runs on the Pi.
+SQLite, serves a live-updating page showing the event feed and running
+counts, and streams the same annotated overlay (crosshair, deadband/fire
+boxes, detection box, FPS) that `cv2.imshow` shows — as an MJPEG feed
+embedded right in the page. No cloud involved, everything runs on the Pi.
 
 ```
-turret loop ──► EventStore (SQLite) ◄── Flask API ──► dashboard (browser)
-   (sighting / fired events)          /api/events        auto-refreshes 2s
+                          ┌─► EventStore (SQLite) ◄─┐
+turret loop ──► annotated │                          Flask API ──► dashboard (browser)
+  frame + events          └─► FrameStore (JPEG) ─────┘   /api/events (2s poll)
+                                                          /api/stream.mjpg (live)
 ```
 
-Run it alongside the main loop:
+Because the preview is served over HTTP rather than drawn in a local
+`cv2.imshow` window, `--dashboard` works fully headless — no
+X11/Wayland/Qt display needed at all, which also sidesteps the Qt platform
+plugin errors a native window can hit under Wayland:
 
 ```sh
-python -m turret --dashboard --mock            # add --headless if no display
+python -m turret --dashboard --mock --headless   # preview lives in the browser only
+python -m turret --dashboard --mock              # both: local window + browser preview
 ```
 
 Then open `http://<pi-ip>:8080` in a browser on the same network. Flags:
@@ -130,7 +138,9 @@ target's pixel position/blob area at that moment. `sighting` is logged once
 when a lock-on starts (not every frame); `fired` is logged whenever
 `FireControl.fire()` actually runs.
 
-The server can also run standalone (e.g. for testing without a camera):
+The server can also run standalone (e.g. for testing without a camera) — in
+that mode there's no camera loop feeding it frames, so the preview panel
+shows "No camera feed" and `/api/stream.mjpg` returns `503`:
 
 ```sh
 python -m turret.webapp.server --db turret_events.db
@@ -140,8 +150,9 @@ curl -X POST http://localhost:8080/api/events \
 ```
 
 Code lives in [`src/turret/webapp/`](src/turret/webapp/): `store.py` (SQLite
-event log), `server.py` (Flask API + static page server), `static/index.html`
-(the dashboard UI).
+event log), `frames.py` (thread-safe latest-JPEG holder for the preview),
+`server.py` (Flask API + MJPEG stream + static page server),
+`static/index.html` (the dashboard UI).
 
 ## ML person detection
 

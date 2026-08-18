@@ -10,23 +10,57 @@ from __future__ import annotations
 import argparse
 import logging
 import threading
+import time
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
+from turret.webapp.frames import FrameStore
 from turret.webapp.store import EventStore
 
 log = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+_MJPEG_BOUNDARY = b"--frame"
 
-def create_app(store: EventStore) -> Flask:
+
+def _mjpeg_frames(frames: FrameStore, *, interval_s: float = 1 / 15, max_frames: int | None = None):
+    """Yield multipart/x-mixed-replace chunks of whatever's latest in `frames`.
+
+    `max_frames` bounds the number of poll iterations (not just successful
+    yields, so it terminates even if no frame is ever set) — test-only, the
+    real route always passes None and streams forever.
+    """
+    polled = 0
+    while max_frames is None or polled < max_frames:
+        jpeg = frames.get_jpeg()
+        if jpeg is not None:
+            yield (
+                _MJPEG_BOUNDARY
+                + b"\r\nContent-Type: image/jpeg\r\n\r\n"
+                + jpeg
+                + b"\r\n"
+            )
+        polled += 1
+        time.sleep(interval_s)
+
+
+def create_app(store: EventStore, frames: FrameStore | None = None) -> Flask:
     app = Flask(__name__, static_folder=None)
 
     @app.get("/")
     def index():
         return send_from_directory(STATIC_DIR, "index.html")
+
+    @app.get("/api/stream.mjpg")
+    def stream():
+        if frames is None:
+            return jsonify({"error": "no camera feed available"}), 503
+        return Response(
+            _mjpeg_frames(frames),
+            mimetype="multipart/x-mixed-replace; boundary=frame",
+        )
 
     @app.get("/api/events")
     def get_events():
@@ -59,11 +93,21 @@ def create_app(store: EventStore) -> Flask:
     return app
 
 
-def run_in_thread(store: EventStore, host: str = "0.0.0.0", port: int = 8080) -> threading.Thread:
+def run_in_thread(
+    store: EventStore,
+    frames: FrameStore | None = None,
+    host: str = "0.0.0.0",
+    port: int = 8080,
+) -> threading.Thread:
     """Serve the dashboard in a background thread alongside the main app loop."""
-    app = create_app(store)
+    app = create_app(store, frames)
     thread = threading.Thread(
-        target=lambda: app.run(host=host, port=port, debug=False, use_reloader=False),
+        # threaded=True: the MJPEG stream is a long-lived connection: without
+        # this it would block every other route (e.g. /api/events polling)
+        # for as long as a viewer has the preview open.
+        target=lambda: app.run(
+            host=host, port=port, debug=False, use_reloader=False, threaded=True
+        ),
         daemon=True,
     )
     thread.start()
@@ -81,7 +125,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     store = EventStore(args.db)
     app = create_app(store)
-    app.run(host=args.host, port=args.port, debug=False)
+    app.run(host=args.host, port=args.port, debug=False, threaded=True)
 
 
 if __name__ == "__main__":

@@ -19,5 +19,8 @@ dist/
 *.mp4
 *.avi
 
+# Dashboard event log (runtime artifact)
+*.db
+
 # ML model weights (fetch with scripts/download_models.py)
 models/
