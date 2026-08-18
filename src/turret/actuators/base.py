@@ -20,6 +20,11 @@ class ContinuousNotSupported(RuntimeError):
 class Axis(ABC):
     """A single rotational axis (yaw, pitch, or roll)."""
 
+    #: Whether spin()/stop_spin() do anything other than raise. Checked
+    #: up front (config validation, self-test) instead of discovering it
+    #: only when spin() is actually called.
+    supports_spin: bool = False
+
     def __init__(
         self,
         name: str,

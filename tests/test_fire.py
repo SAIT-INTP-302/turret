@@ -80,3 +80,10 @@ def test_make_fire_control():
         make_fire_control(FireConfig(mode="servo_pull"), None)
     with pytest.raises(ValueError):
         make_fire_control(FireConfig(mode="nope"), None)
+
+
+def test_roll_spin_rejects_non_spinning_axis():
+    servo_like = MockAxis("roll")
+    servo_like.supports_spin = False  # e.g. a real ServoAxis
+    with pytest.raises(ValueError, match="continuous-rotation"):
+        make_fire_control(FireConfig(mode="roll_spin"), servo_like)

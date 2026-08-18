@@ -42,6 +42,8 @@ def step_phase(n: int) -> tuple[int, int, int, int]:
 
 
 class StepperAxis(Axis):
+    supports_spin = True
+
     def __init__(self, pi, name: str, cfg: StepperAxisConfig) -> None:
         super().__init__(
             name,
