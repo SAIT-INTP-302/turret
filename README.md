@@ -9,7 +9,7 @@ and in range.
 ```
 camera ──► Detector (hsv | tflite | opencv_dnn) ──► Tracker ──► yaw/pitch axes (slew-limited)
                  │
-                 └─────────► FireDecider ──► FireControl (log | spin roll axis)
+                 └─────────► FireDecider ──► FireControl (log | pull trigger servo | spin roll axis)
 ```
 
 - **Pitch/Yaw**: SG92R micro servos via the pigpio daemon. The angle→pulse
@@ -18,9 +18,12 @@ camera ──► Detector (hsv | tflite | opencv_dnn) ──► Tracker ──�
   [`ESP32Servo-master/`](ESP32Servo-master/) Arduino library, as is the
   slew-rate-limited motion of its Sweep example. The LEDC timer/tick code was
   dropped — `pigpio.set_servo_pulsewidth()` takes microseconds directly.
-- **Roll**: 28BYJ-48 stepper on a ULN2003 driver (half-stepping, 4096
-  steps/rev). Firing is done by rotating the barrel, which needs continuous
-  rotation a 90°-travel servo can't provide — hence the stepper.
+- **Roll**: SG92R micro servo (same driver as pitch/yaw). Firing pulls the
+  trigger servo to `fire.trigger_pull_angle`, holds it for
+  `fire.trigger_hold_s`, then releases it back to rest (`fire.mode:
+  servo_pull`). A 28BYJ-48 stepper + ULN2003 driver is still supported for a
+  continuous-rotation, spin-the-barrel mechanism (`fire.mode: roll_spin`,
+  `axes.roll.backend: stepper`) if that's how your hardware is built.
 - **Detection**: pluggable, selected by `detector_backend` in
   [`config/default.yaml`](config/default.yaml) or `--detector` on the CLI.
   Default is HSV red threshold over both hue-wrap ranges (0–10 and 170–180),
@@ -65,10 +68,10 @@ must come from apt.
 |-------|-------------------|--------------------------|
 | Yaw   | SG92R servo       | 17 (signal)              |
 | Pitch | SG92R servo       | 27 (signal)              |
-| Roll  | 28BYJ-48 stepper  | 5, 6, 13, 19 (IN1–IN4)   |
+| Roll  | SG92R servo (trigger pull) | 5 (signal)      |
 
-Power servos and the stepper from a separate 5 V supply with common ground —
-not from the Pi's 5 V rail.
+Power servos from a separate 5 V supply with common ground — not from the
+Pi's 5 V rail.
 
 ### Bring-up order
 
@@ -86,7 +89,9 @@ not from the Pi's 5 V rail.
 3. `python -m turret --headless --log-level DEBUG` — full loop with
    `fire.mode: log` (no firing hardware engaged). Add `--detector tflite` (or
    `opencv_dnn`) to use an ML backend instead of the HSV default.
-4. Switch `fire.mode: roll_spin` when the barrel mechanism is mounted.
+4. Switch `fire.mode: servo_pull` when the trigger mechanism is mounted
+   (or `fire.mode: roll_spin` if using a stepper-driven spinning barrel
+   instead).
 
 ## Web dashboard
 
@@ -186,7 +191,7 @@ at the `tflite` model, since `tflite` is the recommended backend.
 `scripts/ml_tune.py` is the ML equivalent of `hsv_tune.py`: live mode shows
 every candidate detection with a confidence trackbar, `--benchmark N` runs
 headless and reports FPS/latency so you can validate real-world performance
-on the actual Pi before enabling `fire.mode: roll_spin`.
+on the actual Pi before enabling `fire.mode: servo_pull` (or `roll_spin`).
 
 ```sh
 python scripts/ml_tune.py --detector tflite --benchmark 100   # timing only, no display
@@ -199,7 +204,7 @@ typically 5–20x larger at the same distance — reusing the HSV-tuned value
 means the turret will consider itself "in range" from much farther away
 than intended. Use the `area` reported by `ml_tune.py` at your intended
 engagement distance to set `fire.min_area_px` before enabling
-`fire.mode: roll_spin` with an ML backend.
+`fire.mode: servo_pull` (or `roll_spin`) with an ML backend.
 
 ### Adding another backend
 
@@ -217,7 +222,8 @@ project targets.
 - All motion is slew-rate limited; nothing slams to a target.
 - Servos are detached (pulse 0) and stepper coils de-energized on exit,
   including Ctrl-C.
-- Keep `fire.mode: log` until the mechanism is mechanically safe to spin.
+- Keep `fire.mode: log` until the trigger/barrel mechanism is mechanically
+  safe to actuate.
 
 ## Credits
 

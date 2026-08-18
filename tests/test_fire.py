@@ -6,6 +6,7 @@ from turret.control.fire import (
     FireDecider,
     LogFireControl,
     RollSpinFireControl,
+    ServoPullFireControl,
     make_fire_control,
 )
 from turret.vision.types import Detection
@@ -56,11 +57,26 @@ def test_roll_spin_fire_control_spins_then_stops():
     assert not roll.spinning
 
 
+def test_servo_pull_fire_control_pulls_then_releases():
+    roll = MockAxis("roll", min_angle=0.0, max_angle=90.0, start_angle=0.0, max_deg_per_s=1000.0)
+    fc = ServoPullFireControl(roll, FireConfig(trigger_pull_angle=90.0, trigger_hold_s=0.15))
+    fc.fire()
+    assert roll.target == 90.0
+    fc.update(0.1)
+    assert roll.target == 90.0
+    fc.update(0.1)
+    assert roll.target == 0.0  # released back to rest
+
+
 def test_make_fire_control():
     assert isinstance(make_fire_control(FireConfig(mode="log"), None), LogFireControl)
     rc = make_fire_control(FireConfig(mode="roll_spin"), MockAxis("roll"))
     assert isinstance(rc, RollSpinFireControl)
+    sc = make_fire_control(FireConfig(mode="servo_pull"), MockAxis("roll"))
+    assert isinstance(sc, ServoPullFireControl)
     with pytest.raises(ValueError):
         make_fire_control(FireConfig(mode="roll_spin"), None)
+    with pytest.raises(ValueError):
+        make_fire_control(FireConfig(mode="servo_pull"), None)
     with pytest.raises(ValueError):
         make_fire_control(FireConfig(mode="nope"), None)

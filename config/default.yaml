@@ -23,12 +23,15 @@ axes:
       start_angle: 90.0
       max_deg_per_s: 120.0
   roll:
-    backend: stepper
-    stepper:
-      pins: [5, 6, 13, 19]   # ULN2003 IN1..IN4
-      steps_per_rev: 4096
-      max_steps_per_s: 500.0
-      spin_steps_per_s: 400.0
+    backend: servo
+    servo:
+      pin: 5
+      min_us: 500        # SG92R calibration — verify with scripts/axis_test.py
+      max_us: 2400
+      min_angle: 0.0
+      max_angle: 90.0
+      start_angle: 0.0    # rest position — trigger not engaged
+      max_deg_per_s: 400.0  # fast pull for a snappy trigger action
 
 camera:
   backend: auto        # auto | picamera2 | opencv
@@ -76,7 +79,7 @@ ml_detection:
 # backends report full-person *bounding-box* area (w*h), which is typically
 # 5-20x larger at the same distance. Retune min_area_px (with
 # scripts/ml_tune.py) before switching detector_backend away from "hsv" and
-# enabling fire.mode: roll_spin — otherwise the turret will consider itself
+# enabling fire.mode: servo_pull — otherwise the turret will consider itself
 # "in range" from much farther away than intended.
 
 control:
@@ -87,11 +90,13 @@ control:
   lost_target_timeout_s: 2.0
 
 fire:
-  mode: log            # log | roll_spin
+  mode: log            # log | roll_spin | servo_pull
   center_tol_px: 25
   min_area_px: 3000
   dwell_s: 0.5
   cooldown_s: 2.0
-  spin_duration_s: 1.0
+  spin_duration_s: 1.0        # roll_spin only
+  trigger_pull_angle: 90.0    # servo_pull only: angle when pulled
+  trigger_hold_s: 0.15        # servo_pull only: how long to hold before releasing
 
 allow_mock_fallback: true
