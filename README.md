@@ -138,6 +138,33 @@ target's pixel position/blob area at that moment. `sighting` is logged once
 when a lock-on starts (not every frame); `fired` is logged whenever
 `FireControl.fire()` actually runs.
 
+### Live tuning
+
+The dashboard's **Tuning** panel lets you drag-adjust eight sensitivity
+parameters while the turret is running, no restart needed:
+
+| Group      | Parameters                                                    |
+|------------|----------------------------------------------------------------|
+| Tracking   | `kp_yaw`, `kp_pitch`, `deadband_px`                             |
+| Fire       | `center_tol_px`, `min_area_px`, `dwell_s`, `cooldown_s`         |
+| Detection  | `conf_threshold` (ML backends only; ignored by `hsv`)           |
+
+Two deliberate limits:
+- **Session-only.** Changes apply to the running turret immediately but
+  never touch `config/default.yaml` — restarting always comes back up on
+  the committed config.
+- **`fire.mode` isn't here, and never will be.** Switching between `log`,
+  `servo_pull`, and `roll_spin` arms/disarms live firing — that stays a
+  config-file + restart action (see [Safety](#safety)), not a dashboard
+  toggle. Axis/servo calibration (pins, pulse widths, angle limits) isn't
+  exposed either; that's `scripts/axis_test.py`'s job.
+
+Implemented in [`src/turret/live_tuning.py`](src/turret/live_tuning.py):
+`Tracker`, `FireDecider`, and the ML detectors are handed a thread-safe
+mutable mirror of their config instead of the frozen dataclass, so
+`GET`/`POST /api/tuning` can change values out from under an already-running
+control loop with no other code changes needed.
+
 The server can also run standalone (e.g. for testing without a camera) — in
 that mode there's no camera loop feeding it frames, so the preview panel
 shows "No camera feed" and `/api/stream.mjpg` returns `503`:
@@ -152,7 +179,9 @@ curl -X POST http://localhost:8080/api/events \
 Code lives in [`src/turret/webapp/`](src/turret/webapp/): `store.py` (SQLite
 event log), `frames.py` (thread-safe latest-JPEG holder for the preview),
 `server.py` (Flask API + MJPEG stream + static page server),
-`static/index.html` (the dashboard UI).
+`static/index.html` (the dashboard UI). Live tuning itself lives in
+[`src/turret/live_tuning.py`](src/turret/live_tuning.py), outside the
+webapp package, since the control loop consumes it directly.
 
 ## ML person detection
 

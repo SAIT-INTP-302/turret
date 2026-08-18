@@ -5,7 +5,6 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from turret.config import TurretConfig
 from turret.vision.types import Detection
 
 _GREEN = (0, 255, 0)
@@ -17,8 +16,10 @@ _WHITE = (255, 255, 255)
 def draw(
     frame: np.ndarray,
     det: Detection | None,
-    cfg: TurretConfig,
     *,
+    deadband_px: float,
+    center_tol_px: float,
+    min_area_px: float,
     fired: bool,
     fps: float,
 ) -> np.ndarray:
@@ -30,14 +31,14 @@ def draw(
     cv2.line(frame, (cx, cy - 12), (cx, cy + 12), _WHITE, 1)
 
     # Deadband (tracking holds) and fire-tolerance boxes
-    db = cfg.control.deadband_px
+    db = int(deadband_px)
     cv2.rectangle(frame, (cx - db, cy - db), (cx + db, cy + db), _WHITE, 1)
-    ft = cfg.fire.center_tol_px
+    ft = int(center_tol_px)
     cv2.rectangle(frame, (cx - ft, cy - ft), (cx + ft, cy + ft), _YELLOW, 1)
 
     if det is not None:
         x, y, bw, bh = det.bbox
-        in_range = det.area >= cfg.fire.min_area_px
+        in_range = det.area >= min_area_px
         cv2.rectangle(frame, (x, y), (x + bw, y + bh), _RED if in_range else _GREEN, 2)
         cv2.circle(frame, (det.cx, det.cy), 4, _RED, -1)
         cv2.putText(

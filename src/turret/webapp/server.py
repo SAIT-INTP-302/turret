@@ -15,6 +15,7 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_from_directory
 
+from turret.live_tuning import ALL_BOUNDS, LiveTuning
 from turret.webapp.frames import FrameStore
 from turret.webapp.store import EventStore
 
@@ -46,7 +47,9 @@ def _mjpeg_frames(frames: FrameStore, *, interval_s: float = 1 / 15, max_frames:
         time.sleep(interval_s)
 
 
-def create_app(store: EventStore, frames: FrameStore | None = None) -> Flask:
+def create_app(
+    store: EventStore, frames: FrameStore | None = None, tuning: LiveTuning | None = None
+) -> Flask:
     app = Flask(__name__, static_folder=None)
 
     @app.get("/")
@@ -61,6 +64,26 @@ def create_app(store: EventStore, frames: FrameStore | None = None) -> Flask:
             _mjpeg_frames(frames),
             mimetype="multipart/x-mixed-replace; boundary=frame",
         )
+
+    @app.get("/api/tuning")
+    def get_tuning():
+        if tuning is None:
+            return jsonify({"error": "no live tuning available"}), 503
+        return jsonify({"values": tuning.snapshot(), "bounds": ALL_BOUNDS})
+
+    @app.post("/api/tuning")
+    def post_tuning():
+        if tuning is None:
+            return jsonify({"error": "no live tuning available"}), 503
+        data = request.get_json(force=True, silent=True) or {}
+        if not data:
+            return jsonify({"error": "request body must be a non-empty object"}), 400
+        try:
+            values = {k: float(v) for k, v in data.items()}
+            new_snapshot = tuning.update(**values)
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"values": new_snapshot, "bounds": ALL_BOUNDS})
 
     @app.get("/api/events")
     def get_events():
@@ -96,11 +119,12 @@ def create_app(store: EventStore, frames: FrameStore | None = None) -> Flask:
 def run_in_thread(
     store: EventStore,
     frames: FrameStore | None = None,
+    tuning: LiveTuning | None = None,
     host: str = "0.0.0.0",
     port: int = 8080,
 ) -> threading.Thread:
     """Serve the dashboard in a background thread alongside the main app loop."""
-    app = create_app(store, frames)
+    app = create_app(store, frames, tuning)
     thread = threading.Thread(
         # threaded=True: the MJPEG stream is a long-lived connection: without
         # this it would block every other route (e.g. /api/events polling)
