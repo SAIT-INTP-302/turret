@@ -140,8 +140,9 @@ when a lock-on starts (not every frame); `fired` is logged whenever
 
 ### Live tuning
 
-The dashboard's **Tuning** panel lets you drag-adjust eight sensitivity
-parameters while the turret is running, no restart needed:
+The dashboard's **Tuning** panel lets you adjust eight sensitivity
+parameters (slider or type an exact number) while the turret is running,
+no restart needed:
 
 | Group      | Parameters                                                    |
 |------------|----------------------------------------------------------------|
@@ -149,10 +150,21 @@ parameters while the turret is running, no restart needed:
 | Fire       | `center_tol_px`, `min_area_px`, `dwell_s`, `cooldown_s`         |
 | Detection  | `conf_threshold` (ML backends only; ignored by `hsv`)           |
 
-Two deliberate limits:
-- **Session-only.** Changes apply to the running turret immediately but
-  never touch `config/default.yaml` — restarting always comes back up on
-  the committed config.
+Each row has a **↺** button to reset just that value; the panel header has
+**Reset all** and **Save**.
+
+- **Reset always means "back to `config/default.yaml`'s value,"** never
+  "back to what I last saved." If you've saved an override and want it
+  gone, edit/delete `config/tuning.local.yaml` (see below) rather than
+  looking for an undo.
+- **Changes are session-only until you hit Save.** Dragging a slider
+  affects the running turret immediately but doesn't survive a restart on
+  its own. **Save** writes the current values to `config/tuning.local.yaml`
+  — gitignored, loaded automatically on top of `config/default.yaml` the
+  next time the turret starts. The committed default file is never written
+  to, so a live deployment's working tree can't silently drift the way an
+  ad-hoc edit would (this bit us once already — see the stray
+  `framebuffer.py` story in the Pi deployment notes).
 - **`fire.mode` isn't here, and never will be.** Switching between `log`,
   `servo_pull`, and `roll_spin` arms/disarms live firing — that stays a
   config-file + restart action (see [Safety](#safety)), not a dashboard
@@ -163,7 +175,8 @@ Implemented in [`src/turret/live_tuning.py`](src/turret/live_tuning.py):
 `Tracker`, `FireDecider`, and the ML detectors are handed a thread-safe
 mutable mirror of their config instead of the frozen dataclass, so
 `GET`/`POST /api/tuning` can change values out from under an already-running
-control loop with no other code changes needed.
+control loop with no other code changes needed. `POST /api/tuning/reset`
+and `POST /api/tuning/save` round out the API.
 
 The server can also run standalone (e.g. for testing without a camera) — in
 that mode there's no camera loop feeding it frames, so the preview panel

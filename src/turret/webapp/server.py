@@ -69,7 +69,9 @@ def create_app(
     def get_tuning():
         if tuning is None:
             return jsonify({"error": "no live tuning available"}), 503
-        return jsonify({"values": tuning.snapshot(), "bounds": ALL_BOUNDS})
+        return jsonify(
+            {"values": tuning.snapshot(), "bounds": ALL_BOUNDS, "defaults": tuning.defaults()}
+        )
 
     @app.post("/api/tuning")
     def post_tuning():
@@ -84,6 +86,28 @@ def create_app(
         except (ValueError, TypeError) as exc:
             return jsonify({"error": str(exc)}), 400
         return jsonify({"values": new_snapshot, "bounds": ALL_BOUNDS})
+
+    @app.post("/api/tuning/reset")
+    def post_tuning_reset():
+        if tuning is None:
+            return jsonify({"error": "no live tuning available"}), 503
+        data = request.get_json(force=True, silent=True) or {}
+        key = data.get("key")
+        try:
+            new_snapshot = tuning.reset(key)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"values": new_snapshot, "bounds": ALL_BOUNDS})
+
+    @app.post("/api/tuning/save")
+    def post_tuning_save():
+        if tuning is None:
+            return jsonify({"error": "no live tuning available"}), 503
+        try:
+            new_snapshot = tuning.save()
+        except RuntimeError as exc:
+            return jsonify({"error": str(exc)}), 500
+        return jsonify({"saved": True, "values": new_snapshot})
 
     @app.get("/api/events")
     def get_events():

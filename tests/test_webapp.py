@@ -71,7 +71,7 @@ def test_tuning_routes_without_tuning_are_503(tmp_path):
 
 def test_get_tuning_returns_values_and_bounds(tmp_path):
     store = EventStore(tmp_path / "events.db")
-    tuning = LiveTuning(TurretConfig())
+    tuning = LiveTuning(TurretConfig(), override_path=None)
     app = create_app(store, tuning=tuning)
     client = app.test_client()
     resp = client.get("/api/tuning")
@@ -79,11 +79,12 @@ def test_get_tuning_returns_values_and_bounds(tmp_path):
     body = resp.get_json()
     assert body["values"]["deadband_px"] == TurretConfig().control.deadband_px
     assert body["bounds"]["deadband_px"] == [0.0, 200.0]
+    assert body["defaults"]["deadband_px"] == TurretConfig().control.deadband_px
 
 
 def test_post_tuning_updates_a_value(tmp_path):
     store = EventStore(tmp_path / "events.db")
-    tuning = LiveTuning(TurretConfig())
+    tuning = LiveTuning(TurretConfig(), override_path=None)
     app = create_app(store, tuning=tuning)
     client = app.test_client()
     resp = client.post("/api/tuning", json={"min_area_px": 2500})
@@ -94,8 +95,75 @@ def test_post_tuning_updates_a_value(tmp_path):
 
 def test_post_tuning_unknown_field_is_400(tmp_path):
     store = EventStore(tmp_path / "events.db")
-    tuning = LiveTuning(TurretConfig())
+    tuning = LiveTuning(TurretConfig(), override_path=None)
     app = create_app(store, tuning=tuning)
     client = app.test_client()
     resp = client.post("/api/tuning", json={"fire_mode": "roll_spin"})
     assert resp.status_code == 400
+
+
+def test_reset_routes_without_tuning_are_503(tmp_path):
+    store = EventStore(tmp_path / "events.db")
+    app = create_app(store, tuning=None)
+    client = app.test_client()
+    assert client.post("/api/tuning/reset", json={}).status_code == 503
+    assert client.post("/api/tuning/save").status_code == 503
+
+
+def test_post_tuning_reset_one_field(tmp_path):
+    store = EventStore(tmp_path / "events.db")
+    tuning = LiveTuning(TurretConfig(), override_path=None)
+    tuning.update(kp_yaw=0.9, min_area_px=99999.0)
+    app = create_app(store, tuning=tuning)
+    client = app.test_client()
+    resp = client.post("/api/tuning/reset", json={"key": "kp_yaw"})
+    assert resp.status_code == 200
+    assert resp.get_json()["values"]["kp_yaw"] == TurretConfig().control.kp_yaw
+    assert tuning.fire.min_area_px == 99999.0  # untouched
+
+
+def test_post_tuning_reset_all(tmp_path):
+    store = EventStore(tmp_path / "events.db")
+    tuning = LiveTuning(TurretConfig(), override_path=None)
+    tuning.update(kp_yaw=0.9, min_area_px=99999.0)
+    app = create_app(store, tuning=tuning)
+    client = app.test_client()
+    resp = client.post("/api/tuning/reset", json={})
+    assert resp.status_code == 200
+    assert resp.get_json()["values"] == tuning.defaults()
+
+
+def test_post_tuning_reset_unknown_key_is_400(tmp_path):
+    store = EventStore(tmp_path / "events.db")
+    tuning = LiveTuning(TurretConfig(), override_path=None)
+    app = create_app(store, tuning=tuning)
+    client = app.test_client()
+    resp = client.post("/api/tuning/reset", json={"key": "bogus_field"})
+    assert resp.status_code == 400
+
+
+def test_post_tuning_save_writes_the_override_file(tmp_path):
+    store = EventStore(tmp_path / "events.db")
+    override_path = tmp_path / "tuning.local.yaml"
+    tuning = LiveTuning(TurretConfig(), override_path=override_path)
+    tuning.update(kp_yaw=0.42)
+    app = create_app(store, tuning=tuning)
+    client = app.test_client()
+    resp = client.post("/api/tuning/save")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["saved"] is True
+    assert body["values"]["kp_yaw"] == 0.42
+    assert override_path.exists()
+
+    reloaded = LiveTuning(TurretConfig(), override_path=override_path)
+    assert reloaded.control.kp_yaw == 0.42
+
+
+def test_post_tuning_save_without_override_path_is_500(tmp_path):
+    store = EventStore(tmp_path / "events.db")
+    tuning = LiveTuning(TurretConfig(), override_path=None)
+    app = create_app(store, tuning=tuning)
+    client = app.test_client()
+    resp = client.post("/api/tuning/save")
+    assert resp.status_code == 500
