@@ -22,5 +22,8 @@ dist/
 # Dashboard event log (runtime artifact)
 *.db
 
+# Saved live-tuning overrides (runtime artifact; config/default.yaml stays canonical)
+config/tuning.local.yaml
+
 # ML model weights (fetch with scripts/download_models.py)
 models/
