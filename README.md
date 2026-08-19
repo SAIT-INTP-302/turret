@@ -4,6 +4,18 @@ SAIT INTP-302 — Roll/Pitch/Yaw turret driven by a Raspberry Pi with an OpenCV
 pipeline that tracks people wearing red and fires when the target is centered
 and in range.
 
+## Documentation
+
+This README is the command reference — setup, wiring, CLI flags, bring-up
+order. For the *why* — architecture, stack rationale, safety model, ops —
+see the [technical documentation set](docs/README.md):
+
+- [Overview](docs/overview.md) — what it is, what it does, scope boundaries
+- [Architecture](docs/architecture.md) — modules, control loop, config system, diagrams
+- [Stack & Rationale](docs/stack.md) — every major dependency and why it was chosen
+- [Deployment & Operations](docs/deployment-and-ops.md) — systemd, self-test, live tuning in production
+- [Show Notes](docs/show-notes.md) — cue-card talking points for presenting/demoing
+
 ## How it works
 
 ```

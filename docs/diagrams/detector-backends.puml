@@ -1,0 +1,58 @@
+@startuml detector-backends
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam class {
+  BorderColor #4a5568
+  BackgroundColor #eef2f7
+  ArrowColor #4a5568
+}
+
+title Detector — one interface, three backends
+
+abstract class Detector {
+  + detect(frame_bgr) -> (Detection | None, debug_img)
+}
+
+class RedBlobDetector {
+  backend: "hsv"
+  -- no model file, no extra dependency --
+  HSV threshold -> contours -> largest blob
+}
+
+class TFLiteDetector {
+  backend: "tflite"
+  -- needs: pip install -e '.[ml]' --
+  -- needs: models/*.tflite --
+  SSD-MobileNet-V2 (COCO, int8)
+  via ai-edge-litert (LiteRT)
+}
+
+class DnnDetector {
+  backend: "opencv_dnn"
+  -- no extra dependency (cv2.dnn) --
+  -- needs: models/*.onnx --
+  NanoDet-Plus (int8) with
+  manual NMS (no baked-in postproc)
+}
+
+Detector <|.. RedBlobDetector
+Detector <|.. TFLiteDetector
+Detector <|.. DnnDetector
+
+class "build_detector(cfg)" as Factory << factory function >>
+Factory ..> Detector : returns, picked by\ncfg.detector_backend
+
+note right of TFLiteDetector
+  Recommended ML backend on Pi 4:
+  aarch64-only wheel, ~5-10+ fps
+end note
+
+note right of DnnDetector
+  Fallback: works on 32-bit OS
+  where LiteRT has no wheel;
+  smaller, less accurate model
+end note
+
+@enduml
