@@ -1,0 +1,61 @@
+@startuml control-loop-sequence
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam participant {
+  BorderColor #4a5568
+  BackgroundColor #eef2f7
+}
+
+title One frame through the control loop (TurretApp.run)
+
+participant "Camera" as Cam
+participant "Detector" as Det
+participant "Tracker" as Trk
+participant "yaw/pitch\nAxis" as Axes
+participant "FireDecider" as Dec
+participant "FireControl" as Fire
+participant "roll Axis\n(trigger)" as Roll
+participant "viz.draw()" as Viz
+participant "FrameStore /\nEventStore" as Dash
+
+Cam -> Det : read() -> frame
+activate Det
+Det -> Det : detect(frame)
+Det --> Trk : Detection | None
+deactivate Det
+
+Trk -> Trk : compute pixel error vs\nframe center, apply deadband
+Trk -> Axes : set_target(angle) if |error| > deadband_px
+
+loop every axis, every frame
+  Axes -> Axes : update(dt) — slew-limited\ntoward target (max_deg_per_s)
+end
+
+Det --> Dec : same Detection | None
+Dec -> Dec : locked = centered (center_tol_px)\n           AND area >= min_area_px
+alt locked continuously for >= dwell_s, cooldown elapsed
+  Dec -> Fire : fire()
+  Fire -> Roll : set_target(pull_angle) / spin()\n(servo_pull / roll_spin)\n-- or just log, if fire.mode: log --
+  Dec --> Dash : log "fired" event
+else newly locked (not yet dwelled)
+  Dec --> Dash : log "sighting" event
+else not locked
+  Dec -> Dec : reset dwell timer
+end
+
+Fire -> Roll : update(dt) — release trigger\nafter trigger_hold_s / spin_duration_s
+
+Trk --> Viz : Detection, deadband_px,\ncenter_tol_px, min_area_px
+Viz -> Viz : draw crosshair, boxes,\nfps, FIRE flash on the frame
+Viz --> Dash : FrameStore.set_frame(annotated frame)
+
+note over Dash
+  Dashboard polls EventStore over
+  HTTP every 2s; the live camera
+  preview is a separate MJPEG pull
+  reading FrameStore continuously.
+end note
+
+@enduml

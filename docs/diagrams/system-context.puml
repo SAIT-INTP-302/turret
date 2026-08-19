@@ -1,0 +1,85 @@
+@startuml system-context
+!theme plain
+skinparam backgroundColor transparent
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultTextAlignment center
+skinparam component {
+  BorderColor #4a5568
+  BackgroundColor #eef2f7
+  ArrowColor #4a5568
+}
+skinparam package {
+  BorderColor #94a3b8
+  BackgroundColor #f8fafc
+}
+
+title Turret — System Context
+
+package "Sensing" {
+  [Camera\n(picamera2 / OpenCV)] as Camera
+  package "Detector (pluggable)" {
+    [HSV blob\n(default)] as HSV
+    [TFLite SSD-MobileNet\n(recommended ML)] as TFLite
+    [OpenCV DNN NanoDet\n(fallback ML)] as DNN
+  }
+}
+
+package "Control" {
+  [Tracker] as Tracker
+  [FireDecider] as Decider
+}
+
+package "Actuation" {
+  [Axis: yaw\n(servo)] as Yaw
+  [Axis: pitch\n(servo)] as Pitch
+  [Axis: roll / trigger\n(servo or stepper)] as Roll
+  [FireControl\n(log / servo_pull / roll_spin)] as FireCtl
+}
+
+package "Web Dashboard" {
+  [EventStore\n(SQLite)] as Store
+  [FrameStore\n(latest JPEG)] as Frames
+  [LiveTuning\n(mutable config mirror)] as Tuning
+  [Flask API +\nstatic dashboard] as Flask
+}
+
+database "config/default.yaml" as Config
+database "config/tuning.local.yaml\n(optional, gitignored)" as TuningFile
+
+Camera --> HSV
+Camera --> TFLite
+Camera --> DNN
+HSV --> Tracker : Detection
+TFLite --> Tracker : Detection
+DNN --> Tracker : Detection
+HSV --> Decider : Detection
+TFLite --> Decider : Detection
+DNN --> Decider : Detection
+
+Tracker --> Yaw : set_target()
+Tracker --> Pitch : set_target()
+Decider --> FireCtl : fire() when locked+dwelled
+FireCtl --> Roll : set_target() / spin()
+
+Config --> Tracker
+Config --> Decider
+Config --> HSV
+Config ..> Tuning : seeds initial values
+TuningFile ..> Tuning : loaded on startup
+Tuning ..> Tuning : Save writes back
+
+Tuning --> Tracker : live-tuned control values
+Tuning --> Decider : live-tuned fire values
+Tuning --> TFLite : live conf_threshold
+Tuning --> DNN : live conf_threshold
+
+Decider ..> Store : sighting / fired events
+Camera ..> Frames : annotated frame (JPEG)
+Store --> Flask
+Frames --> Flask
+Tuning --> Flask
+
+Flask --> [Browser dashboard] : HTTP :8080
+
+@enduml

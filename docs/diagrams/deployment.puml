@@ -1,0 +1,60 @@
+@startuml deployment
+!theme plain
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam defaultTextAlignment center
+skinparam node {
+  BorderColor #4a5568
+  BackgroundColor #eef2f7
+}
+skinparam database {
+  BorderColor #4a5568
+  BackgroundColor #f8fafc
+}
+
+title Turret — Deployment (Raspberry Pi 4B)
+
+node "Raspberry Pi 4B (aarch64, Raspberry Pi OS)" as Pi {
+  node "systemd" as SD {
+    component "pigpiod.service" as Pigpiod
+    component "turret.service\n(Restart=always)" as TurretSvc
+    component "turret-ap.service" as APSvc
+  }
+
+  component "CSI camera\n(ov5647, via picamera2/libcamera)" as Camera
+  component "turret Python venv\n(--system-site-packages)" as Venv
+
+  database "config/default.yaml" as Cfg
+  database "config/tuning.local.yaml" as TuneFile
+  database "turret_events.db\n(SQLite)" as Db
+  database "models/\n(tflite + onnx weights)" as Models
+
+  TurretSvc --> Venv : ExecStart
+  TurretSvc ..> Pigpiod : Requires=
+  Venv --> Camera : picamera2
+  Venv --> Cfg
+  Venv --> TuneFile
+  Venv --> Db
+  Venv --> Models
+
+  Pigpiod --> GPIO
+  GPIO -down-> [Yaw servo\n(pin 17)]
+  GPIO -down-> [Pitch servo\n(pin 27)]
+  GPIO -down-> [Roll/trigger servo\n(pin 5)]
+}
+
+APSvc --> [Virtual WiFi AP\n(alongside wlan0 uplink)]
+
+cloud "Network" as Net
+[Virtual WiFi AP\n(alongside wlan0 uplink)] --> Net
+Venv --> Net : dashboard :8080
+
+node "Any browser\n(phone, laptop)" as Browser
+Net --> Browser : http://<pi>:8080
+
+node "Dev machine" as Dev {
+  component "git / rsync\nover SSH" as DevTools
+}
+DevTools --> Pi : deploy (rsync;\nno git creds on the Pi)
+
+@enduml
