@@ -53,6 +53,29 @@
     letter-spacing: .05em;
     color: var(--muted);
   }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .panel-header h2 { margin: 0; }
+  .panel-actions { display: flex; align-items: center; gap: 8px; }
+  .btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent2); }
+  .btn.primary { background: var(--accent2); border-color: var(--accent2); color: #06121f; font-weight: 700; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .tuning-status { font-size: 12px; color: var(--muted); min-width: 64px; text-align: right; }
 
   .grid {
     display: grid;
@@ -85,14 +108,36 @@
     font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
     color: var(--muted); margin-bottom: 10px;
   }
-  .tune-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .tune-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .tune-row:last-child { margin-bottom: 0; }
-  .tune-row label { flex: 0 0 132px; font-size: 13px; }
-  .tune-row input[type=range] { flex: 1; accent-color: var(--accent2); }
-  .tune-row .val {
-    flex: 0 0 68px; text-align: right; font-size: 12px; color: var(--muted);
+  .tune-row label { flex: 0 0 122px; font-size: 13px; }
+  .tune-row input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent2); }
+  .tune-row .num-input {
+    flex: 0 0 60px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 3px 5px;
+    text-align: right;
     font-variant-numeric: tabular-nums;
   }
+  .tune-row .num-input:focus { outline: 1px solid var(--accent2); }
+  .tune-row .unit { flex: 0 0 20px; font-size: 11px; color: var(--muted); }
+  .tune-row .reset-btn {
+    flex: 0 0 auto;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 4px 7px;
+  }
+  .tune-row .reset-btn:hover { color: var(--text); border-color: var(--accent2); }
 
   .stats { display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap; }
   .stat {
@@ -149,7 +194,14 @@
     </section>
 
     <section class="panel" id="tuningPanel">
-      <h2>Tuning</h2>
+      <div class="panel-header">
+        <h2>Tuning</h2>
+        <div class="panel-actions">
+          <span class="tuning-status" id="tuningStatus"></span>
+          <button type="button" class="btn" id="tuningResetAll">Reset all</button>
+          <button type="button" class="btn primary" id="tuningSave">Save</button>
+        </div>
+      </div>
       <div id="tuningGroups"></div>
       <div class="empty" id="tuningEmpty" style="display:none;">Tuning unavailable</div>
     </section>
@@ -230,9 +282,26 @@ const TUNABLES = [
   { key: "conf_threshold", label: "Confidence threshold", group: "Detection", step: 0.01, decimals: 2 },
 ];
 
-function fmtTuneVal(value, tunable) {
-  const s = Number(value).toFixed(tunable.decimals);
-  return tunable.unit ? `${s}${tunable.unit}` : s;
+function roundTo(value, decimals) {
+  return Number(Number(value).toFixed(decimals));
+}
+
+function setRowValue(key, value) {
+  const tunable = TUNABLES.find((t) => t.key === key);
+  const rounded = roundTo(value, tunable.decimals);
+  const range = document.getElementById(`tune-${key}`);
+  const num = document.getElementById(`tune-${key}-num`);
+  if (range && document.activeElement !== range) range.value = rounded;
+  if (num && document.activeElement !== num) num.value = rounded;
+}
+
+function setStatus(text) {
+  const status = document.getElementById("tuningStatus");
+  status.textContent = text;
+  if (text) {
+    clearTimeout(setStatus._timer);
+    setStatus._timer = setTimeout(() => { status.textContent = ""; }, 2000);
+  }
 }
 
 function renderTuning(values, bounds) {
@@ -256,7 +325,9 @@ function renderTuning(values, bounds) {
       row.innerHTML = `
         <label for="tune-${t.key}">${t.label}</label>
         <input type="range" id="tune-${t.key}" min="${lo}" max="${hi}" step="${t.step}" value="${values[t.key]}">
-        <span class="val" id="tune-${t.key}-val">${fmtTuneVal(values[t.key], t)}</span>
+        <input type="number" class="num-input" id="tune-${t.key}-num" min="${lo}" max="${hi}" step="${t.step}" value="${roundTo(values[t.key], t.decimals)}">
+        <span class="unit">${t.unit || ""}</span>
+        <button type="button" class="reset-btn" data-key="${t.key}" title="Reset ${t.label} to default">↺</button>
       `;
       groupDiv.appendChild(row);
     }
@@ -264,14 +335,28 @@ function renderTuning(values, bounds) {
   }
 
   let debounceTimer = null;
-  container.querySelectorAll("input[type=range]").forEach((input) => {
-    const key = input.id.replace("tune-", "");
-    const tunable = TUNABLES.find((t) => t.key === key);
-    input.addEventListener("input", () => {
-      document.getElementById(`tune-${key}-val`).textContent = fmtTuneVal(input.value, tunable);
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => postTuning(key, parseFloat(input.value)), 150);
+  const debouncedPost = (key, value) => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => postTuning(key, value), 150);
+  };
+
+  container.querySelectorAll("input[type=range]").forEach((range) => {
+    const key = range.id.replace("tune-", "");
+    range.addEventListener("input", () => {
+      document.getElementById(`tune-${key}-num`).value = range.value;
+      debouncedPost(key, parseFloat(range.value));
     });
+  });
+  container.querySelectorAll("input[type=number]").forEach((num) => {
+    const key = num.id.replace("tune-", "").replace("-num", "");
+    num.addEventListener("input", () => {
+      if (num.value === "") return;
+      document.getElementById(`tune-${key}`).value = num.value;
+      debouncedPost(key, parseFloat(num.value));
+    });
+  });
+  container.querySelectorAll(".reset-btn").forEach((btn) => {
+    btn.addEventListener("click", () => resetTuning(btn.dataset.key));
   });
 }
 
@@ -284,16 +369,43 @@ async function postTuning(key, value) {
     });
     if (!res.ok) return;
     const data = await res.json();
-    const tunable = TUNABLES.find((t) => t.key === key);
-    const input = document.getElementById(`tune-${key}`);
-    // Reconcile with the (possibly clamped) server value, but don't yank
-    // the slider out from under an in-progress drag.
-    if (input && document.activeElement !== input) {
-      input.value = data.values[key];
-    }
-    document.getElementById(`tune-${key}-val`).textContent = fmtTuneVal(data.values[key], tunable);
+    setRowValue(key, data.values[key]);
   } catch (e) {
     console.error("Failed to update tuning", e);
+  }
+}
+
+async function resetTuning(key) {
+  try {
+    const res = await fetch("/api/tuning/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(key ? { key } : {}),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (key) {
+      setRowValue(key, data.values[key]);
+    } else {
+      for (const [k, v] of Object.entries(data.values)) setRowValue(k, v);
+    }
+    setStatus("Reset");
+  } catch (e) {
+    console.error("Failed to reset tuning", e);
+  }
+}
+
+async function saveTuning() {
+  try {
+    const res = await fetch("/api/tuning/save", { method: "POST" });
+    if (!res.ok) {
+      setStatus("Save failed");
+      return;
+    }
+    setStatus("Saved ✓");
+  } catch (e) {
+    console.error("Failed to save tuning", e);
+    setStatus("Save failed");
   }
 }
 
@@ -303,8 +415,11 @@ async function initTuning() {
     if (!res.ok) throw new Error("tuning unavailable");
     const data = await res.json();
     renderTuning(data.values, data.bounds);
+    document.getElementById("tuningResetAll").addEventListener("click", () => resetTuning(null));
+    document.getElementById("tuningSave").addEventListener("click", saveTuning);
   } catch (e) {
     document.getElementById("tuningGroups").style.display = "none";
+    document.querySelector("#tuningPanel .panel-actions").style.display = "none";
     document.getElementById("tuningEmpty").style.display = "block";
   }
 }
